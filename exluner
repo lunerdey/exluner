@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="th" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title id="page-title">My Custom Profile</title>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Cropper.js CSS & JS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+
+    <!-- Firebase SDK (v9 Compat) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+    <style>
+        [data-theme="dark"] {
+            --primary-color: #ff5e97;
+            --bg-color: #0b0b0e;
+            --card-bg: #16161a;
+            --text-color: #ffffff;
+            --text-muted: #a0a0ab;
+            --border-color: #26262e;
+            --input-bg: #000000;
+        }
+
+        [data-theme="light"] {
+            --primary-color: #ff5e97;
+            --bg-color: #f4f5f8;
+            --card-bg: #ffffff;
+            --text-color: #1a1a1e;
+            --text-muted: #62626d;
+            --border-color: #e1e2e8;
+            --input-bg: #f8f9fa;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Kanit', sans-serif; transition: background-color 0.3s, color 0.3s; }
+        body { background-color: var(--bg-color); color: var(--text-color); padding-bottom: 90px; min-height: 100vh; }
+
+        .top-left-controls { position: absolute; top: 15px; left: 15px; z-index: 90; display: flex; gap: 8px; }
+        .admin-trigger, .theme-toggle-btn {
+            background: rgba(22, 22, 26, 0.75); backdrop-filter: blur(10px);
+            border: 1px solid var(--border-color); color: var(--text-color);
+            padding: 8px 14px; border-radius: 20px; cursor: pointer; font-size: 0.85rem; display: flex; align-items: center; gap: 6px;
+        }
+        .admin-trigger:hover, .theme-toggle-btn:hover { border-color: var(--primary-color); color: var(--primary-color); }
+
+        .cd-player-widget {
+            position: fixed; top: 15px; right: 15px; z-index: 100;
+            background: rgba(22, 22, 26, 0.85); backdrop-filter: blur(10px);
+            border: 1px solid var(--border-color); padding: 6px 14px 6px 8px;
+            border-radius: 40px; display: flex; align-items: center; gap: 10px; cursor: pointer;
+        }
+        .cd-disc {
+            width: 36px; height: 36px; border-radius: 50%;
+            background-size: cover; background-position: center;
+            border: 2px solid var(--primary-color); position: relative;
+            animation: spin 4s linear infinite; animation-play-state: paused;
+        }
+        .cd-disc::after {
+            content: ''; position: absolute; inset: 50%; transform: translate(-50%, -50%);
+            width: 8px; height: 8px; background: var(--bg-color); border-radius: 50%; border: 1px solid rgba(255,255,255,0.3);
+        }
+        .cd-playing .cd-disc { animation-play-state: running; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        .song-info { display: flex; flex-direction: column; }
+        .song-title { font-size: 0.8rem; font-weight: 600; color: var(--text-color); max-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .song-status { font-size: 0.65rem; color: var(--primary-color); }
+
+        .banner-container {
+            width: 100%; aspect-ratio: 3 / 1; max-height: 300px;
+            background-color: var(--card-bg); overflow: hidden; position: relative;
+            -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 60%, rgba(0,0,0,0) 100%);
+            mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 60%, rgba(0,0,0,0) 100%);
+        }
+        .banner-media { width: 100%; height: 100%; object-fit: cover; }
+
+        .profile-section { max-width: 850px; margin: 0 auto; padding: 0 20px; position: relative; }
+        .profile-flex { display: flex; justify-content: space-between; align-items: flex-start; margin-top: -40px; margin-bottom: 25px; gap: 20px; }
+        .bio-box { padding-top: 50px; flex: 1; }
+        .bio-title { font-size: 1.6rem; font-weight: 600; color: var(--text-color); display: flex; align-items: center; gap: 8px; }
+        .bio-detail { font-size: 0.95rem; color: var(--text-muted); margin-top: 8px; white-space: pre-line; line-height: 1.5; }
+        .profile-avatar { width: 100px; height: 100px; border-radius: 50%; border: 4px solid var(--bg-color); background-color: var(--card-bg); object-fit: cover; flex-shrink: 0; }
+
+        .folder-bar-wrapper { max-width: 850px; margin: 20px auto 15px; padding: 0 20px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+        .folder-bar { display: flex; gap: 10px; overflow-x: auto; scrollbar-width: none; }
+        .folder-bar::-webkit-scrollbar { display: none; }
+        .folder-tab { background: var(--card-bg); color: var(--text-muted); border: 1px solid var(--border-color); padding: 8px 18px; border-radius: 12px; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 8px; font-size: 0.9rem; }
+        .folder-tab.active { background: var(--primary-color); color: #fff; border-color: var(--primary-color); }
+        
+        .add-block-direct-btn { background: var(--primary-color); color: #fff; border: none; padding: 8px 16px; border-radius: 12px; cursor: pointer; white-space: nowrap; font-weight: 600; font-size: 0.85rem; display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+        .content-container { max-width: 850px; margin: 0 auto; padding: 0 20px; }
+        .blocks-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 15px; margin-top: 15px; }
+
+        .block-wrapper { position: relative; }
+        .block-card, .img-block-card, .contact-btn {
+            background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 16px; overflow: hidden; position: relative; height: 100%;
+        }
+        .block-card { padding: 20px; display: flex; flex-direction: column; justify-content: center; }
+        .img-block-card img, .img-block-card video { width: 100%; height: 180px; object-fit: cover; display: block; }
+        .img-block-body { padding: 15px; }
+
+        .contact-btn { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; color: var(--text-color); text-decoration: none; }
+
+        .block-actions {
+            position: absolute; top: 8px; right: 8px; z-index: 10; display: flex; gap: 6px;
+            background: rgba(0,0,0,0.6); padding: 4px; border-radius: 8px; backdrop-filter: blur(4px);
+        }
+        .block-act-btn {
+            background: rgba(255,255,255,0.2); border: none; color: #fff;
+            padding: 4px 8px; border-radius: 6px; cursor: pointer; font-size: 0.75rem;
+        }
+        .block-act-btn.del { background: rgba(231, 76, 60, 0.8); }
+        .block-act-btn:hover { opacity: 0.9; }
+
+        .block-size-sm { grid-column: span 1; }
+        .block-size-md { grid-column: span 2; }
+        .block-size-lg { grid-column: span 3; }
+        @media (max-width: 600px) { .block-size-md, .block-size-lg { grid-column: span 1; } }
+
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(5px); display: none; justify-content: center; align-items: center; z-index: 1000; padding: 20px; }
+        .modal-content { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 20px; width: 100%; max-width: 550px; max-height: 88vh; overflow-y: auto; padding: 25px; color: var(--text-color); }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 6px; color: var(--text-muted); font-size: 0.85rem; }
+        .form-control { width: 100%; padding: 11px; background: var(--input-bg); border: 1px solid var(--border-color); color: var(--text-color); border-radius: 10px; font-size: 0.9rem; }
+        .form-control:focus { border-color: var(--primary-color); outline: none; }
+        .btn-submit { background: var(--primary-color); color: #fff; border: none; padding: 12px; width: 100%; border-radius: 10px; font-weight: 600; cursor: pointer; margin-top: 10px; font-size: 0.95rem; }
+        .delete-btn { background: #e74c3c; color: white; border: none; padding: 5px 12px; border-radius: 8px; cursor: pointer; font-size: 0.8rem; }
+        .item-row { display: flex; justify-content: space-between; align-items: center; background: var(--input-bg); padding: 12px; border-radius: 10px; margin-top: 8px; border: 1px solid var(--border-color); }
+        .footer-credit { text-align: center; margin-top: 40px; color: var(--text-muted); font-size: 0.8rem; }
+
+        .openlink-category-title { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin: 18px 0 10px; text-transform: uppercase; }
+        .openlink-selector-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+        @media (max-width: 500px) { .openlink-selector-grid { grid-template-columns: repeat(2, 1fr); } }
+        .openlink-card { background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 14px; padding: 16px 10px; text-align: center; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
+        .openlink-card:hover { border-color: var(--primary-color); transform: translateY(-2px); }
+        .openlink-card i { font-size: 1.6rem; color: var(--primary-color); }
+        .openlink-card span { font-size: 0.85rem; font-weight: 500; color: var(--text-color); }
+        .openlink-card small { font-size: 0.7rem; color: var(--text-muted); }
+
+        .file-input-wrapper { display: flex; gap: 8px; align-items: center; }
+        .upload-btn-label { background: var(--border-color); color: var(--text-color); padding: 10px 14px; border-radius: 10px; cursor: pointer; font-size: 0.85rem; white-space: nowrap; }
+
+        /* Crop Modal Container */
+        .crop-container { width: 100%; max-height: 400px; overflow: hidden; background: #000; border-radius: 12px; margin-top: 10px; }
+        .crop-container img { max-width: 100%; display: block; }
+    </style>
+</head>
+<body>
+
+    <div class="top-left-controls">
+        <button class="admin-trigger" onclick="openLoginModal()"><i class="fas fa-cog"></i> หลังบ้าน</button>
+        <button class="theme-toggle-btn" onclick="toggleTheme()" id="theme-btn"><i class="fas fa-sun"></i> โหมดสว่าง</button>
+    </div>
+
+    <div class="cd-player-widget" id="cd-widget" onclick="toggleAudio()">
+        <div class="cd-disc" id="cd-cover"></div>
+        <div class="song-info">
+            <span class="song-title" id="song-title-txt">ไม่พบเพลง</span>
+            <span class="song-status" id="song-status-txt">กำลังเล่น...</span>
+        </div>
+    </div>
+    <audio id="bg-audio" loop autoplay></audio>
+
+    <div class="banner-container" id="banner-box"></div>
+
+    <div class="profile-section" id="profile-section">
+        <div class="profile-flex">
+            <div class="bio-box">
+                <div class="bio-title">
+                    <span id="display-name">Site Name</span>
+                    <i class="fas fa-check-circle" style="color: var(--primary-color); font-size: 1.1rem;"></i>
+                </div>
+                <div class="bio-detail" id="display-bio"></div>
+            </div>
+            <img src="" id="display-avatar" class="profile-avatar" alt="Profile">
+        </div>
+    </div>
+
+    <div class="folder-bar-wrapper">
+        <div class="folder-bar" id="folder-bar"></div>
+        <button class="add-block-direct-btn" onclick="openOpenLinkMenu()"><i class="fas fa-plus"></i> เพิ่มบล็อก</button>
+    </div>
+
+    <div class="content-container" id="content-container"></div>
+    <div class="footer-credit" id="footer-credit"></div>
+
+    <!-- Login Modal -->
+    <div class="modal-overlay" id="login-modal">
+        <div class="modal-content" style="max-width:380px;">
+            <h3 style="margin-bottom:15px; text-align:center;">🔑 เข้าสู่ระบบหลังบ้าน</h3>
+            <div class="form-group">
+                <label>ชื่อผู้ใช้งาน (Username)</label>
+                <input type="text" id="login-user" class="form-control" placeholder="กรอก Username...">
+            </div>
+            <div class="form-group">
+                <label>รหัสผ่าน (Password)</label>
+                <input type="password" id="login-pass" class="form-control" placeholder="กรอกรหัสผ่าน...">
+            </div>
+            <button class="btn-submit" onclick="checkLogin()">เข้าสู่ระบบ</button>
+            <button onclick="closeModal('login-modal')" style="background:none; border:none; color:var(--text-muted); width:100%; margin-top:10px; cursor:pointer;">ยกเลิก</button>
+        </div>
+    </div>
+
+    <!-- Admin Panel Modal -->
+    <div class="modal-overlay" id="admin-modal">
+        <div class="modal-content">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2 id="modal-role-title">⚙️ ตั้งค่าระบบหลังบ้าน</h2>
+                <button onclick="closeModal('admin-modal')" style="background:none; border:none; color:var(--text-color); font-size:1.5rem; cursor:pointer;">&times;</button>
+            </div>
+
+            <div id="client-settings">
+                <h3>🎨 ปรับแต่งโปรไฟล์ & สีธีม</h3>
+                <div class="form-group" style="margin-top:10px;">
+                    <label>ชื่อเจ้าของเว็บ / แบรนด์</label>
+                    <input type="text" id="cfg-name" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>ข้อความไบโอ (Bio Detail)</label>
+                    <textarea id="cfg-bio" class="form-control" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>แสดงรูปโปรไฟล์หรือไม่?</label>
+                    <select id="cfg-show-profile" class="form-control">
+                        <option value="true">แสดงรูปโปรไฟล์</option>
+                        <option value="false">ซ่อนรูปโปรไฟล์</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>รูปโปรไฟล์ (ครอบตัดอัตราส่วน 1:1)</label>
+                    <div class="file-input-wrapper">
+                        <input type="text" id="cfg-avatar" class="form-control">
+                        <label class="upload-btn-label">📁 เลือกรูปโปรไฟล์ <input type="file" accept="image/*" style="display:none;" onchange="handleFileCrop(this, 'cfg-avatar', 1)"></label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>แบนเนอร์ (ครอบตัดอัตราส่วน 3:1)</label>
+                    <div class="file-input-wrapper">
+                        <input type="text" id="cfg-banner" class="form-control">
+                        <label class="upload-btn-label">📁 เลือกแบนเนอร์ <input type="file" accept="image/*,video/*" style="display:none;" onchange="handleFileCrop(this, 'cfg-banner', 3/1)"></label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>🎨 สีหลักธีม</label>
+                    <input type="color" id="cfg-color" class="form-control" style="height:45px; width:80px; padding:2px; cursor:pointer;">
+                </div>
+
+                <hr style="border-color: var(--border-color); margin:20px 0;">
+
+                <h3>🎵 ตั้งค่าเพลงแผ่นซีดี</h3>
+                <div class="form-group">
+                    <label>ชื่อเพลง & ศิลปิน</label>
+                    <input type="text" id="cfg-song-title" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>URL ปกเพลง</label>
+                    <input type="text" id="cfg-song-cover" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>URL ไฟล์เพลง (.mp3)</label>
+                    <input type="text" id="cfg-song-url" class="form-control">
+                </div>
+
+                <button class="btn-submit" onclick="saveClientBasic()">💾 บันทึกการตั้งค่าลง Cloud</button>
+
+                <hr style="border-color: var(--border-color); margin:25px 0;">
+
+                <h3>📁 จัดการโฟลเดอร์</h3>
+                <div style="display:flex; gap:10px; margin-top:10px;">
+                    <input type="text" id="new-folder-name" class="form-control" placeholder="ชื่อโฟลเดอร์ใหม่...">
+                    <button class="btn-submit" style="width:120px; margin-top:0;" onclick="addFolder()">➕ เพิ่ม</button>
+                </div>
+                <div id="folder-list" style="margin-top:10px;"></div>
+            </div>
+
+            <div id="super-settings" style="display:none; margin-top:30px; padding-top:20px; border-top:2px dashed var(--primary-color);">
+                <h3 style="color:#e74c3c;">🛡️ ผู้พัฒนา (Super Admin Mode)</h3>
+                <div class="form-group" style="margin-top:10px;">
+                    <label>รหัสผ่านลูกค้า (Client Password)</label>
+                    <input type="text" id="super-client-pass" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>ข้อความเครดิต Footer</label>
+                    <input type="text" id="super-footer" class="form-control">
+                </div>
+                <button class="btn-submit" style="background:#e74c3c;" onclick="saveSuperSettings()">🛡️ บันทึกการตั้งค่าระบบ</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Crop Image -->
+    <div class="modal-overlay" id="crop-modal" style="z-index:2000;">
+        <div class="modal-content" style="max-width:500px;">
+            <h3>✂️ ครอปตัดรูปภาพ</h3>
+            <div class="crop-container">
+                <img id="crop-image-element" src="">
+            </div>
+            <button class="btn-submit" onclick="applyCrop()" style="margin-top:15px;">✂️ ยืนยันการตัดรูปภาพ</button>
+            <button onclick="closeModal('crop-modal')" style="background:none; border:none; color:var(--text-muted); width:100%; margin-top:10px; cursor:pointer;">ยกเลิก</button>
+        </div>
+    </div>
+
+    <!-- Modal: Select Block Type -->
+    <div class="modal-overlay" id="openlink-menu-modal">
+        <div class="modal-content">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3>✨ เพิ่มบล็อกใหม่ลงใน "<span id="target-folder-name" style="color:var(--primary-color);"></span>"</h3>
+                <button onclick="closeModal('openlink-menu-modal')" style="background:none; border:none; color:var(--text-color); font-size:1.5rem; cursor:pointer;">&times;</button>
+            </div>
+
+            <div class="openlink-category-title">ลิงก์ & โซเชียล</div>
+            <div class="openlink-selector-grid">
+                <div class="openlink-card" onclick="openBlockForm('contact-1col')">
+                    <i class="fas fa-square"></i><span>ปุ่มลิงก์</span><small>1 คอลัมน์</small>
+                </div>
+            </div>
+
+            <div class="openlink-category-title">รูปภาพ & สินค้า</div>
+            <div class="openlink-selector-grid">
+                <div class="openlink-card" onclick="openBlockForm('product')">
+                    <i class="fas fa-shopping-bag"></i><span>สินค้า</span><small>รูป + ราคา</small>
+                </div>
+                <div class="openlink-card" onclick="openBlockForm('image')">
+                    <i class="fas fa-image"></i><span>รูปภาพ / วิดีโอ</span><small>แสดงสื่อ</small>
+                </div>
+            </div>
+
+            <div class="openlink-category-title">ข้อความ</div>
+            <div class="openlink-selector-grid">
+                <div class="openlink-card" onclick="openBlockForm('text-rect')">
+                    <i class="fas fa-align-left"></i><span>บรรยาย</span><small>กล่องข้อความ</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Add / Edit Block Form -->
+    <div class="modal-overlay" id="block-form-modal">
+        <div class="modal-content" style="max-width:480px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                <h3 id="form-block-title">กรอกข้อมูลบล็อก</h3>
+                <button onclick="closeModal('block-form-modal')" style="background:none; border:none; color:var(--text-color); font-size:1.5rem; cursor:pointer;">&times;</button>
+            </div>
+
+            <div id="dynamic-form-fields"></div>
+
+            <button class="btn-submit" style="background:#27ae60;" onclick="saveBlockFromForm()">💾 บันทึกบล็อก</button>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBORRp6-TMi22R_ONHSvgs9tu-I-Yx7-0w",
+            authDomain: "login2-kudy.firebaseapp.com",
+            projectId: "login2-kudy",
+            storageBucket: "login2-kudy.firebasestorage.app",
+            messagingSenderId: "675101428194",
+            appId: "1:675101428194:web:13efb3f8389fbd11ef91bb"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        const MASTER_SUPER_USER = "admin";
+        const MASTER_SUPER_PASS = "DEV_PASSWORD_9999";
+
+        const defaultData = {
+            themeMode: "dark",
+            name: "paertly",
+            bio: "open 24hrs ♡ accept bank n wallet\n... add line for fast reply ☕",
+            showProfile: true,
+            avatarUrl: "https://picsum.photos/200",
+            bannerUrl: "https://i.gifer.com/fetch/w300-preview/3d/3d3a040b2f56b3a32338f081c7f766e4.gif",
+            themeColor: "#ff5e97",
+            songTitle: "Lofi Relaxing Beat",
+            songCover: "https://picsum.photos/100",
+            songUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+            clientPassword: "1234",
+            developerCredit: "Designed & Developed by Your Studio",
+            folders: ["หน้าแรก (Home)", "ผลงาน (Works)", "ติดต่อ (Contact)"],
+            blocks: [
+                { id: 1, folder: "หน้าแรก (Home)", type: "text-rect", size: "md", title: "About Me", content: "ยินดีต้อนรับสู่พื้นที่รวมผลงานครับ" },
+                { id: 2, folder: "ผลงาน (Works)", type: "image", imgUrl: "https://picsum.photos/500/300", imgDesc: "ตัวอย่างผลงานกราฟิกสไตล์มินิมอล" },
+                { id: 3, folder: "ติดต่อ (Contact)", type: "contact-1col", contactName: "Instagram", contactLink: "https://instagram.com", contactIcon: "fab fa-instagram" }
+            ]
+        };
+
+        let appData = defaultData;
+        let activeFolder = "หน้าแรก (Home)";
+        let currentRole = null; 
+        let editingBlockId = null; 
+        let selectedBlockType = null;
+
+        // Crop Instance Variables
+        let cropper = null;
+        let targetFieldForCrop = null;
+
+        function fetchCloudData() {
+            db.collection("sites").doc("main_site").get().then((doc) => {
+                if (doc.exists) { appData = doc.data(); } else { saveData(); }
+                if (appData.folders && appData.folders.length > 0) { activeFolder = appData.folders[0]; }
+                initApp();
+            }).catch((error) => { console.error("Firebase fetch error:", error); initApp(); });
+        }
+
+        function initApp() {
+            document.title = appData.name || "My Custom Profile";
+            document.documentElement.setAttribute('data-theme', appData.themeMode || 'dark');
+            document.documentElement.style.setProperty('--primary-color', appData.themeColor || '#ff5e97');
+            document.getElementById('footer-credit').innerHTML = appData.developerCredit || '';
+
+            const themeBtn = document.getElementById('theme-btn');
+            themeBtn.innerHTML = appData.themeMode === 'light' ? `<i class="fas fa-moon"></i> โหมดมืด` : `<i class="fas fa-sun"></i> โหมดสว่าง`;
+
+            document.getElementById('display-name').innerText = appData.name || '';
+            const bioDetailEl = document.getElementById('display-bio');
+            if (appData.bio && appData.bio.trim() !== "") {
+                bioDetailEl.innerText = appData.bio;
+                bioDetailEl.style.display = 'block';
+            } else { bioDetailEl.style.display = 'none'; }
+
+            const avatarEl = document.getElementById('display-avatar');
+            if (appData.showProfile) {
+                avatarEl.style.display = 'block';
+                avatarEl.src = appData.avatarUrl || 'https://picsum.photos/200';
+            } else { avatarEl.style.display = 'none'; }
+
+            const bannerBox = document.getElementById('banner-box');
+            if (!appData.bannerUrl) { bannerBox.innerHTML = ''; }
+            else if (appData.bannerUrl.includes('video') || appData.bannerUrl.endsWith('.mp4')) {
+                bannerBox.innerHTML = `<video class="banner-media" autoplay loop muted playsinline src="${appData.bannerUrl}"></video>`;
+            } else {
+                bannerBox.innerHTML = `<img class="banner-media" src="${appData.bannerUrl}" alt="Banner">`;
+            }
+
+            document.getElementById('song-title-txt').innerText = appData.songTitle || 'ไม่พบเพลง';
+            document.getElementById('cd-cover').style.backgroundImage = `url('${appData.songCover || 'https://picsum.photos/100'}')`;
+            
+            const audio = document.getElementById('bg-audio');
+            if (appData.songUrl && audio.src !== appData.songUrl) { audio.src = appData.songUrl; }
+
+            renderFolders();
+            renderBlocks();
+        }
+
+        function toggleTheme() {
+            appData.themeMode = appData.themeMode === 'light' ? 'dark' : 'light';
+            saveData();
+        }
+
+        function renderFolders() {
+            const bar = document.getElementById('folder-bar');
+            if (!appData.folders) appData.folders = [];
+            bar.innerHTML = appData.folders.map(f => `
+                <div class="folder-tab ${f === activeFolder ? 'active' : ''}" onclick="selectFolder('${f}')">
+                    <i class="fas fa-folder"></i> ${f}
+                </div>
+            `).join('');
+        }
+
+        function selectFolder(f) {
+            activeFolder = f;
+            renderFolders();
+            renderBlocks();
+        }
+
+        function renderBlocks() {
+            const container = document.getElementById('content-container');
+            const blocks = appData.blocks || [];
+            const filtered = blocks.filter(b => b.folder === activeFolder);
+
+            if (filtered.length === 0) {
+                container.innerHTML = `<div style="text-align:center; padding:40px; color:var(--text-muted);">ไม่มีเนื้อหาในโฟลเดอร์นี้ กดปุ่ม "+ เพิ่มบล็อก" ด้านบนเพื่อเพิ่มได้เลย!</div>`;
+                return;
+            }
+
+            let html = `<div class="blocks-grid">`;
+            filtered.forEach(b => {
+                const isMediaVideo = b.imgUrl && (b.imgUrl.includes('data:video') || b.imgUrl.endsWith('.mp4'));
+                const actionBtns = currentRole ? `
+                    <div class="block-actions">
+                        <button class="block-act-btn" onclick="openBlockForm('${b.type}', ${b.id})">✏️ แก้ไข</button>
+                        <button class="block-act-btn del" onclick="deleteBlockDirect(${b.id})">🗑️ ลบ</button>
+                    </div>
+                ` : '';
+
+                html += `<div class="block-wrapper">`;
+                if (b.type.startsWith('text')) {
+                    const sizeClass = `block-size-${b.size || 'sm'}`;
+                    html += `
+                        <div class="block-card ${sizeClass}">
+                            ${actionBtns}
+                            ${b.title ? `<h3 style="color:var(--primary-color); margin-bottom:5px;">${b.title}</h3>` : ''}
+                            <div>${b.content || ''}</div>
+                        </div>`;
+                } else if (b.type === 'image' || b.type === 'product') {
+                    html += `
+                        <div class="img-block-card block-size-sm">
+                            ${actionBtns}
+                            ${isMediaVideo ? `<video src="${b.imgUrl}" autoplay loop muted playsinline></video>` : `<img src="${b.imgUrl}" alt="Media">`}
+                            <div class="img-block-body">
+                                <strong>${b.title || ''}</strong>
+                                ${b.price ? `<div style="color:var(--primary-color); font-weight:600;">${b.price}</div>` : ''}
+                                ${b.imgDesc ? `<div style="font-size:0.85rem; color:var(--text-muted); margin-top:4px;">${b.imgDesc}</div>` : ''}
+                            </div>
+                        </div>`;
+                } else if (b.type.startsWith('contact')) {
+                    html += `
+                        <div style="position:relative;">
+                            ${actionBtns}
+                            <a href="${b.contactLink || '#'}" target="_blank" class="contact-btn block-size-sm">
+                                <div style="display:flex; align-items:center; gap:10px;">
+                                    <i class="${b.contactIcon || 'fas fa-link'}" style="font-size:1.3rem; color:var(--primary-color);"></i>
+                                    <span style="font-weight:500;">${b.contactName}</span>
+                                </div>
+                                <i class="fas fa-chevron-right" style="font-size:0.8rem; opacity:0.5;"></i>
+                            </a>
+                        </div>`;
+                }
+                html += `</div>`;
+            });
+            html += `</div>`;
+            container.innerHTML = html;
+        }
+
+        function deleteBlockDirect(id) {
+            if (confirm("คุณต้องการลบบล็อกนี้ใช่ไหม?")) {
+                appData.blocks = appData.blocks.filter(b => b.id !== id);
+                saveData();
+            }
+        }
+
+        // Image Cropper Logic
+        function handleFileCrop(input, targetFieldId, aspectRatio) {
+            const file = input.files[0];
+            if (!file) return;
+
+            // If video file, skip cropper
+            if (file.type.startsWith('video/')) {
+                const reader = new FileReader();
+                reader.onload = function(e) { document.getElementById(targetFieldId).value = e.target.result; };
+                reader.readAsDataURL(file);
+                return;
+            }
+
+            targetFieldForCrop = targetFieldId;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const cropImg = document.getElementById('crop-image-element');
+                cropImg.src = e.target.result;
+
+                document.getElementById('crop-modal').style.display = 'flex';
+
+                if (cropper) { cropper.destroy(); }
+                cropper = new Cropper(cropImg, {
+                    aspectRatio: aspectRatio,
+                    viewMode: 1,
+                    autoCropArea: 1,
+                });
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function applyCrop() {
+            if (!cropper) return;
+            const canvas = cropper.getCroppedCanvas({
+                maxWidth: 1200,
+                maxHeight: 1200,
+            });
+            
+            const croppedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+            document.getElementById(targetFieldForCrop).value = croppedDataUrl;
+            
+            closeModal('crop-modal');
+            if (cropper) { cropper.destroy(); cropper = null; }
+        }
+
+        function handleFileUpload(input, targetFieldId) {
+            const file = input.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) { document.getElementById(targetFieldId).value = e.target.result; };
+            reader.readAsDataURL(file);
+        }
+
+        function openBlockForm(type, blockId = null) {
+            selectedBlockType = type;
+            editingBlockId = blockId;
+            closeModal('openlink-menu-modal');
+
+            const existingBlock = blockId ? appData.blocks.find(b => b.id === blockId) : null;
+            const fieldsContainer = document.getElementById('dynamic-form-fields');
+            let html = '';
+
+            document.getElementById('form-block-title').innerText = blockId ? "✏️ แก้ไขบล็อก" : "➕ เพิ่มบล็อกใหม่";
+
+            if (type.startsWith('contact')) {
+                html = `
+                    <div class="form-group"><label>ชื่อปุ่ม / ช่องทาง</label><input type="text" id="bf-name" class="form-control" value="${existingBlock ? existingBlock.contactName || '' : ''}"></div>
+                    <div class="form-group"><label>URL ลิงก์</label><input type="text" id="bf-link" class="form-control" value="${existingBlock ? existingBlock.contactLink || '' : ''}"></div>
+                    <div class="form-group"><label>ไอคอน FontAwesome</label><input type="text" id="bf-icon" class="form-control" value="${existingBlock ? existingBlock.contactIcon || '' : 'fas fa-link'}"></div>
+                `;
+            } else if (type === 'product' || type === 'image') {
+                html = `
+                    <div class="form-group">
+                        <label>รูปภาพ / GIF / วิดีโอ (เลือกจากอัลบั้ม หรือ วาง URL)</label>
+                        <div class="file-input-wrapper">
+                            <input type="text" id="bf-img" class="form-control" value="${existingBlock ? existingBlock.imgUrl || '' : ''}">
+                            <label class="upload-btn-label">📁 เลือกรูป <input type="file" accept="image/*,video/*" style="display:none;" onchange="handleFileUpload(this, 'bf-img')"></label>
+                        </div>
+                    </div>
+                    <div class="form-group"><label>ชื่อหัวข้อ / ชื่อสินค้า</label><input type="text" id="bf-title" class="form-control" value="${existingBlock ? existingBlock.title || '' : ''}"></div>
+                    ${type === 'product' ? `<div class="form-group"><label>ราคาสินค้า</label><input type="text" id="bf-price" class="form-control" value="${existingBlock ? existingBlock.price || '' : ''}"></div>` : ''}
+                    <div class="form-group"><label>รายละเอียดเพิ่มเติม</label><input type="text" id="bf-desc" class="form-control" value="${existingBlock ? existingBlock.imgDesc || '' : ''}"></div>
+                `;
+            } else if (type.startsWith('text')) {
+                html = `
+                    <div class="form-group"><label>ขนาดบล็อก</label>
+                        <select id="bf-size" class="form-control">
+                            <option value="sm" ${existingBlock && existingBlock.size==='sm'?'selected':''}>เล็ก (1 คอลัมน์)</option>
+                            <option value="md" ${existingBlock && existingBlock.size==='md'?'selected':''}>กลาง (2 คอลัมน์)</option>
+                            <option value="lg" ${existingBlock && existingBlock.size==='lg'?'selected':''}>ใหญ่ (3 คอลัมน์)</option>
+                        </select>
+                    </div>
+                    <div class="form-group"><label>หัวข้อ</label><input type="text" id="bf-title" class="form-control" value="${existingBlock ? existingBlock.title || '' : ''}"></div>
+                    <div class="form-group"><label>ข้อความบรรยาย</label><textarea id="bf-content" class="form-control" rows="3">${existingBlock ? existingBlock.content || '' : ''}</textarea></div>
+                `;
+            }
+
+            fieldsContainer.innerHTML = html;
+            document.getElementById('block-form-modal').style.display = 'flex';
+        }
+
+        function saveBlockFromForm() {
+            if (!appData.blocks) appData.blocks = [];
+            
+            let blockData = editingBlockId ? appData.blocks.find(b => b.id === editingBlockId) : { id: Date.now(), folder: activeFolder, type: selectedBlockType };
+
+            if (selectedBlockType.startsWith('contact')) {
+                blockData.contactName = document.getElementById('bf-name').value || 'Link';
+                blockData.contactLink = document.getElementById('bf-link').value || '#';
+                blockData.contactIcon = document.getElementById('bf-icon').value || 'fas fa-link';
+            } else if (selectedBlockType === 'product' || selectedBlockType === 'image') {
+                blockData.imgUrl = document.getElementById('bf-img').value || 'https://picsum.photos/400/300';
+                blockData.title = document.getElementById('bf-title').value || '';
+                if (document.getElementById('bf-price')) blockData.price = document.getElementById('bf-price').value;
+                blockData.imgDesc = document.getElementById('bf-desc').value || '';
+            } else if (selectedBlockType.startsWith('text')) {
+                blockData.size = document.getElementById('bf-size').value;
+                blockData.title = document.getElementById('bf-title').value;
+                blockData.content = document.getElementById('bf-content').value;
+            }
+
+            if (!editingBlockId) { appData.blocks.push(blockData); }
+            saveData();
+            closeModal('block-form-modal');
+        }
+
+        function checkLogin() {
+            const userInput = document.getElementById('login-user').value.trim();
+            const passInput = document.getElementById('login-pass').value.trim();
+
+            if (userInput === MASTER_SUPER_USER && passInput === MASTER_SUPER_PASS) {
+                currentRole = 'SUPER';
+                closeModal('login-modal');
+                renderBlocks();
+                openDashboardModal();
+            } else if ((userInput.toLowerCase() === 'client' || userInput === appData.name) && passInput === appData.clientPassword) {
+                currentRole = 'CLIENT';
+                closeModal('login-modal');
+                renderBlocks();
+                openDashboardModal();
+            } else { alert('Username หรือ รหัสผ่านไม่ถูกต้อง'); }
+        }
+
+        function openDashboardModal() {
+            document.getElementById('cfg-name').value = appData.name || '';
+            document.getElementById('cfg-bio').value = appData.bio || '';
+            document.getElementById('cfg-show-profile').value = (appData.showProfile !== undefined ? appData.showProfile : true).toString();
+            document.getElementById('cfg-avatar').value = appData.avatarUrl || '';
+            document.getElementById('cfg-banner').value = appData.bannerUrl || '';
+            document.getElementById('cfg-color').value = appData.themeColor || '#ff5e97';
+            document.getElementById('cfg-song-title').value = appData.songTitle || '';
+            document.getElementById('cfg-song-cover').value = appData.songCover || '';
+            document.getElementById('cfg-song-url').value = appData.songUrl || '';
+
+            renderFolderList();
+
+            if (currentRole === 'SUPER') {
+                document.getElementById('modal-role-title').innerText = '⚙️ หลังบ้าน (Super Admin)';
+                document.getElementById('super-settings').style.display = 'block';
+                document.getElementById('super-client-pass').value = appData.clientPassword || '1234';
+                document.getElementById('super-footer').value = appData.developerCredit || '';
+            } else {
+                document.getElementById('modal-role-title').innerText = '⚙️ หลังบ้าน (Client Admin)';
+                document.getElementById('super-settings').style.display = 'none';
+            }
+            document.getElementById('admin-modal').style.display = 'flex';
+        }
+
+        function saveClientBasic() {
+            appData.name = document.getElementById('cfg-name').value;
+            appData.bio = document.getElementById('cfg-bio').value;
+            appData.showProfile = document.getElementById('cfg-show-profile').value === 'true';
+            appData.avatarUrl = document.getElementById('cfg-avatar').value;
+            appData.bannerUrl = document.getElementById('cfg-banner').value;
+            appData.themeColor = document.getElementById('cfg-color').value;
+            appData.songTitle = document.getElementById('cfg-song-title').value;
+            appData.songCover = document.getElementById('cfg-song-cover').value;
+            appData.songUrl = document.getElementById('cfg-song-url').value;
+
+            saveData();
+            alert('บันทึกการตั้งค่าลง Cloud เรียบร้อย!');
+        }
+
+        function addFolder() {
+            const name = document.getElementById('new-folder-name').value;
+            if (!name) return;
+            if (!appData.folders) appData.folders = [];
+            if (!appData.folders.includes(name)) {
+                appData.folders.push(name);
+                saveData();
+                document.getElementById('new-folder-name').value = '';
+                openDashboardModal();
+            }
+        }
+
+        function deleteFolder(f) {
+            if (appData.folders.length <= 1) return alert('ต้องมีอย่างน้อย 1 โฟลเดอร์');
+            appData.folders = appData.folders.filter(x => x !== f);
+            appData.blocks = appData.blocks.filter(b => b.folder !== f);
+            activeFolder = appData.folders[0];
+            saveData();
+            openDashboardModal();
+        }
+
+        function renderFolderList() {
+            document.getElementById('folder-list').innerHTML = (appData.folders || []).map(f => `
+                <div class="item-row">
+                    <span>${f}</span>
+                    <button class="delete-btn" onclick="deleteFolder('${f}')">ลบ</button>
+                </div>
+            `).join('');
+        }
+
+        function openOpenLinkMenu() {
+            document.getElementById('target-folder-name').innerText = activeFolder;
+            document.getElementById('openlink-menu-modal').style.display = 'flex';
+        }
+
+        function openLoginModal() { document.getElementById('login-modal').style.display = 'flex'; }
+        function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+        function toggleAudio() {
+            const audio = document.getElementById('bg-audio');
+            if (!audio.src) return alert('ยังไม่ได้ตั้งค่าไฟล์เพลง .mp3');
+            const widget = document.getElementById('cd-widget');
+            const status = document.getElementById('song-status-txt');
+
+            if (audio.paused) {
+                audio.play();
+                widget.classList.add('cd-playing');
+                status.innerText = 'กำลังเล่น...';
+            } else {
+                audio.pause();
+                widget.classList.remove('cd-playing');
+                status.innerText = 'คลิกเพื่อเล่น';
+            }
+        }
+
+        function saveSuperSettings() {
+            appData.clientPassword = document.getElementById('super-client-pass').value;
+            appData.developerCredit = document.getElementById('super-footer').value;
+            saveData();
+            alert('บันทึกสิทธิ์ผู้พัฒนาเรียบร้อย!');
+        }
+
+        function saveData() {
+            db.collection("sites").doc("main_site").set(appData).then(() => {
+                initApp();
+            }).catch(err => console.error("Cloud Save Error:", err));
+        }
+
+        fetchCloudData();
+    </script>
+</body>
+</html>
+
